@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لوحة المستودع</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            margin: 0; padding: 15px;
+            background: #f4f7fa;
+        }
+        .container { max-width: 700px; margin: auto; }
+
+        /* Header */
+        .header-actions {
+            display: flex; justify-content: space-between;
+            align-items: center; margin-bottom: 15px;
+            flex-wrap: wrap; gap: 10px;
+        }
+        h1 { color: #2c3e50; font-size: 20px; margin: 0; }
+        .refresh-btn {
+            background: #2ecc71; color: white; border: none;
+            padding: 8px 14px; border-radius: 8px;
+            cursor: pointer; font-size: 14px;
+        }
+        .refresh-btn:disabled { background: #95a5a6; }
+
+        /* Tabs */
+        .tabs {
+            display: flex; gap: 5px; margin-bottom: 15px;
+            background: #ecf0f1; border-radius: 12px; padding: 5px;
+        }
+        .tab-btn {
+            flex: 1; padding: 10px 5px; border: none;
+            border-radius: 10px; font-size: 14px; font-weight: bold;
+            cursor: pointer; background: transparent; color: #7f8c8d;
+            transition: 0.3s;
+        }
+        .tab-btn.active {
+            background: white; color: #2c3e50;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .tab-badge {
+            background: #e74c3c; color: white;
+            padding: 1px 7px; border-radius: 20px;
+            font-size: 11px; margin-right: 4px;
+        }
+        .tab-btn.active .tab-badge { background: #c0392b; }
+
+        /* Cards */
+        .card {
+            background: white; border-radius: 12px;
+            padding: 15px; margin-bottom: 12px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.08);
+            border-right: 5px solid #3498db;
+        }
+        .card.new { border-right-color: #3498db; }
+        .card.claimed-mine { border-right-color: #f39c12; }
+        .card.claimed-other { border-right-color: #95a5a6; opacity: 0.85; }
+        .card.not-found { border-right-color: #e74c3c; }
+        .card.found { border-right-color: #27ae60; }
+        .card.verify { border-right-color: #9b59b6; }
+
+        .card-header {
+            display: flex; justify-content: space-between;
+            align-items: center; margin-bottom: 8px;
+            flex-wrap: wrap; gap: 5px;
+        }
+        .request-id {
+            font-weight: bold; color: #2c3e50; font-size: 15px;
+        }
+        .badge {
+            padding: 3px 10px; border-radius: 20px;
+            font-size: 11px; color: white; font-weight: bold;
+        }
+        .badge.new { background: #3498db; }
+        .badge.claimed { background: #f39c12; }
+        .badge.other { background: #95a5a6; }
+        .badge.not-found { background: #e74c3c; }
+        .badge.found { background: #27ae60; }
+        .badge.resubmit { background: #9b59b6; }
+        .badge.verify { background: #e67e22; }
+
+        .card-body { font-size: 14px; color: #34495e; line-height: 1.7; }
+        .card-body .label { color: #7f8c8d; }
+        .card-body .value { font-weight: bold; }
+        .card-footer {
+            font-size: 12px; color: #95a5a6;
+            margin-top: 8px; padding-top: 8px;
+            border-top: 1px solid #ecf0f1;
+        }
+
+        .loader {
+            text-align: center; color: #7f8c8d;
+            padding: 40px 20px;
+        }
+        .error {
+            color: #e74c3c; text-align: center;
+            padding: 20px; background: #fadbd8;
+            border-radius: 8px;
+        }
+        .empty {
+            text-align: center; color: #27ae60;
+            padding: 40px 20px; font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header-actions">
+        <h1>🚚 لوحة المستودع</h1>
+        <button class="refresh-btn" id="refreshBtn" onclick="loadCurrentTab()">
+            🔄 تحديث
+        </button>
+    </div>
+
+    <div class="tabs">
+        <button class="tab-btn active" id="tabNew" onclick="switchTab('new')">
+            🆕 جديدة <span class="tab-badge" id="badgeNew">0</span>
+        </button>
+        <button class="tab-btn" id="tabNotFound" onclick="switchTab('not_found')">
+            ❌ لم يُعثر <span class="tab-badge" id="badgeNotFound">0</span>
+        </button>
+        <button class="tab-btn" id="tabFound" onclick="switchTab('found')">
+            ✅ تم إيجادها <span class="tab-badge" id="badgeFound">0</span>
+        </button>
+    </div>
+
+    <div id="content">
+        <div class="loader">⏳ جاري التحميل...</div>
+    </div>
+</div>
+
+<script>
+    // ===================== التهيئة =====================
+    const tg = window.Telegram.WebApp;
+    tg.ready();
+    tg.expand();
+
+    const user = tg.initDataUnsafe.user;
+    const staffId = user ? user.id : null;
+    const BASE_URL = "https://logistics-bot.onrender.com";
+
+    let currentTab = 'new';
+    let currentData = [];
+
+    // ===================== التنقل بين التبويبات =====================
+    function switchTab(tab) {
+        currentTab = tab;
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById('tab' + capitalize(tab)).classList.add('active');
+        loadCurrentTab();
+    }
+
+    function capitalize(str) {
+        if (str === 'new') return 'New';
+        if (str === 'not_found') return 'NotFound';
+        if (str === 'found') return 'Found';
+        return str;
+    }
+
+    function loadCurrentTab() {
+        loadRequests(currentTab);
+    }
+
+    // ===================== جلب الطلبات =====================
+    async function loadRequests(tab) {
+        const content = document.getElementById('content');
+        const refreshBtn = document.getElementById('refreshBtn');
+        refreshBtn.disabled = true;
+        content.innerHTML = '<div class="loader">⏳ جاري التحميل...</div>';
+
+        try {
+            const res = await fetch(`${BASE_URL}/get_requests`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ staff_id: staffId, tab: tab })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'فشل التحميل');
+            if (data.error) throw new Error(data.error);
+
+            currentData = data;
+            renderRequests(data, tab);
+        } catch (e) {
+            console.error('❌', e);
+            content.innerHTML = `<div class="error">❌ ${e.message}</div>`;
+        } finally {
+            refreshBtn.disabled = false;
+        }
+    }
+
+    // ===================== عدّادات التبويبات =====================
+    async function updateBadges() {
+        try {
+            const [newRes, nfRes, foundRes] = await Promise.all([
+                fetch(`${BASE_URL}/get_requests`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ staff_id: staffId, tab: 'new' })
+                }),
+                fetch(`${BASE_URL}/get_requests`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ staff_id: staffId, tab: 'not_found' })
+                }),
+                fetch(`${BASE_URL}/get_requests`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ staff_id: staffId, tab: 'found' })
+                })
+            ]);
+            const newData = await newRes.json();
+            const nfData = await nfRes.json();
+            const foundData = await foundRes.json();
+
+            document.getElementById('badgeNew').textContent = newData.length || 0;
+            document.getElementById('badgeNotFound').textContent = nfData.length || 0;
+            document.getElementById('badgeFound').textContent = foundData.length || 0;
+        } catch (e) {
+            console.error('❌ فشل تحديث العدّادات:', e);
+        }
+    }
+
+    // ===================== عرض الطلبات =====================
+    function renderRequests(data, tab) {
+        const content = document.getElementById('content');
+
+        if (!data || data.length === 0) {
+            const emptyMsgs = {
+                'new': '✨ لا توجد طلبات جديدة',
+                'not_found': '✨ لا توجد طلبات بحاجة متابعة',
+                'found': '✨ لا توجد طلبات مكتملة حديثًا'
+            };
+            content.innerHTML = `<div class="empty">${emptyMsgs[tab]}</div>`;
+            return;
+        }
+
+        let html = '';
+        for (const r of data) {
+            html += buildCard(r, tab);
+        }
+        content.innerHTML = html;
+    }
+
+    function buildCard(r, tab) {
+        // تحديد نوع البطاقة والشارة
+        let cardClass = '';
+        let badgeClass = '';
+        let badgeText = '';
+
+        if (r.status === 'NEW') {
+            cardClass = 'new';
+            badgeClass = 'new';
+            badgeText = '🆕 جديد';
+        } else if (r.status === 'CLAIMED') {
+            if (r.assigned_to == staffId) {
+                cardClass = 'claimed-mine';
+                badgeClass = 'claimed';
+                badgeText = '🔄 أنت تعالج';
+            } else {
+                cardClass = 'claimed-other';
+                badgeClass = 'other';
+                badgeText = '🔒 متولى من آخر';
+            }
+        } else if (r.status === 'NOT_FOUND') {
+            cardClass = 'not-found';
+            badgeClass = 'not-found';
+            badgeText = '❌ لم يُعثر';
+        } else if (r.status === 'FOUND') {
+            cardClass = 'found';
+            badgeClass = 'found';
+            badgeText = '✅ تم إيجادها';
+        }
+
+        if (r.needs_verification) {
+            cardClass += ' verify';
+        }
+
+        // شارات إضافية
+        let extraBadges = '';
+        if (r.is_resubmitted) {
+            extraBadges += '<span class="badge resubmit">🔁 أُعيد بحثه</span> ';
+        }
+        if (r.needs_verification) {
+            extraBadges += '<span class="badge verify">⚠️ تأكيد الرف</span> ';
+        }
+
+        // الملاحظات (إن وُجدت)
+        let notesHtml = '';
+        if (r.notes && r.notes.length > 0) {
+            notesHtml = '<div style="margin-top:8px; padding-top:8px; border-top:1px dashed #ecf0f1;">';
+            notesHtml += '<div style="font-size:12px; color:#7f8c8d; margin-bottom:4px;">📝 الملاحظات:</div>';
+            for (const n of r.notes) {
+                notesHtml += `<div style="background:#fff8e1; padding:6px 10px; border-radius:6px; margin-bottom:4px; font-size:13px;">${n.note}</div>`;
+            }
+            notesHtml += '</div>';
+        }
+
+        // ربط الطلب المشابه
+        let similarHtml = '';
+        if (r.similar_to_id) {
+            similarHtml = `<div style="font-size:12px; color:#9b59b6; margin-top:5px;">🔗 مشابه للطلب #${r.similar_to_id}</div>`;
+        }
+
+        // تنسيق الوقت
+        let timeHtml = '';
+        if (r.created_at) {
+            timeHtml = `📅 ${formatTime(r.created_at)}`;
+        }
+
+        return `
+            <div class="card ${cardClass}" data-id="${r.id}">
+                <div class="card-header">
+                    <div class="request-id">📦 طلب #${r.id}</div>
+                    <div>${extraBadges}<span class="badge ${badgeClass}">${badgeText}</span></div>
+                </div>
+                <div class="card-body">
+                    <div><span class="label">آخر 4 أرقام:</span> <span class="value">${r.last4}</span></div>
+                    <div><span class="label">الموقع:</span> <span class="value">${r.full_location}</span></div>
+                    ${similarHtml}
+                    ${notesHtml}
+                </div>
+                <div class="card-footer">${timeHtml}</div>
+            </div>
+        `;
+    }
+
+    function formatTime(isoString) {
+        try {
+            const d = new Date(isoString);
+            const hh = String(d.getHours()).padStart(2, '0');
+            const mm = String(d.getMinutes()).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            return `${day}/${month} - ${hh}:${mm}`;
+        } catch (e) {
+            return isoString;
+        }
+    }
+
+    // ===================== التشغيل =====================
+    document.addEventListener('DOMContentLoaded', () => {
+        if (!staffId) {
+            document.body.innerHTML = `
+                <div class="error" style="padding:40px; margin:20px;">
+                    ❌ لم نتمكن من التعرف عليك.
+                    <br><br>
+                    تأكد من فتح اللوحة من داخل Telegram.
+                </div>`;
+            return;
+        }
+        switchTab('new');
+        updateBadges();
+    });
+</script>
+</body>
+</html>
