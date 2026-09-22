@@ -14,7 +14,6 @@
         }
         .container { max-width: 700px; margin: auto; }
 
-        /* Header */
         .header-actions {
             display: flex; justify-content: space-between;
             align-items: center; margin-bottom: 15px;
@@ -28,7 +27,6 @@
         }
         .refresh-btn:disabled { background: #95a5a6; }
 
-        /* Tabs */
         .tabs {
             display: flex; gap: 5px; margin-bottom: 15px;
             background: #ecf0f1; border-radius: 12px; padding: 5px;
@@ -50,7 +48,6 @@
         }
         .tab-btn.active .tab-badge { background: #c0392b; }
 
-        /* Cards */
         .card {
             background: white; border-radius: 12px;
             padding: 15px; margin-bottom: 12px;
@@ -92,6 +89,35 @@
             margin-top: 8px; padding-top: 8px;
             border-top: 1px solid #ecf0f1;
         }
+
+        /* Actions */
+        .actions {
+            display: flex; gap: 8px; flex-wrap: wrap;
+            margin-top: 10px; padding-top: 10px;
+            border-top: 1px solid #ecf0f1;
+        }
+        .action-btn {
+            flex: 1; min-width: 100px;
+            padding: 9px 12px; border: none;
+            border-radius: 8px; font-size: 13px;
+            font-weight: bold; cursor: pointer;
+            transition: 0.2s;
+        }
+        .action-btn:disabled {
+            opacity: 0.6; cursor: not-allowed;
+        }
+        .action-btn.primary { background: #3498db; color: white; }
+        .action-btn.primary:hover:not(:disabled) { background: #2980b9; }
+        .action-btn.success { background: #27ae60; color: white; }
+        .action-btn.success:hover:not(:disabled) { background: #229954; }
+        .action-btn.danger { background: #e74c3c; color: white; }
+        .action-btn.danger:hover:not(:disabled) { background: #c0392b; }
+        .action-btn.warning { background: #f39c12; color: white; }
+        .action-btn.warning:hover:not(:disabled) { background: #d68910; }
+        .action-btn.secondary { background: #95a5a6; color: white; }
+        .action-btn.secondary:hover:not(:disabled) { background: #7f8c8d; }
+        .action-btn.recheck { background: #9b59b6; color: white; }
+        .action-btn.recheck:hover:not(:disabled) { background: #8e44ad; }
 
         .loader {
             text-align: center; color: #7f8c8d;
@@ -147,7 +173,7 @@
     let currentTab = 'new';
     let currentData = [];
 
-    // ===================== التنقل بين التبويبات =====================
+    // ===================== التنقل =====================
     function switchTab(tab) {
         currentTab = tab;
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -193,25 +219,18 @@
         }
     }
 
-    // ===================== عدّادات التبويبات =====================
+    // ===================== العدّادات =====================
     async function updateBadges() {
         try {
+            const opts = (tab) => ({
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ staff_id: staffId, tab: tab })
+            });
             const [newRes, nfRes, foundRes] = await Promise.all([
-                fetch(`${BASE_URL}/get_requests`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ staff_id: staffId, tab: 'new' })
-                }),
-                fetch(`${BASE_URL}/get_requests`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ staff_id: staffId, tab: 'not_found' })
-                }),
-                fetch(`${BASE_URL}/get_requests`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ staff_id: staffId, tab: 'found' })
-                })
+                fetch(`${BASE_URL}/get_requests`, opts('new')),
+                fetch(`${BASE_URL}/get_requests`, opts('not_found')),
+                fetch(`${BASE_URL}/get_requests`, opts('found'))
             ]);
             const newData = await newRes.json();
             const nfData = await nfRes.json();
@@ -221,7 +240,7 @@
             document.getElementById('badgeNotFound').textContent = nfData.length || 0;
             document.getElementById('badgeFound').textContent = foundData.length || 0;
         } catch (e) {
-            console.error('❌ فشل تحديث العدّادات:', e);
+            console.error('❌ العدّادات:', e);
         }
     }
 
@@ -247,7 +266,6 @@
     }
 
     function buildCard(r, tab) {
-        // تحديد نوع البطاقة والشارة
         let cardClass = '';
         let badgeClass = '';
         let badgeText = '';
@@ -276,11 +294,8 @@
             badgeText = '✅ تم إيجادها';
         }
 
-        if (r.needs_verification) {
-            cardClass += ' verify';
-        }
+        if (r.needs_verification) cardClass += ' verify';
 
-        // شارات إضافية
         let extraBadges = '';
         if (r.is_resubmitted) {
             extraBadges += '<span class="badge resubmit">🔁 أُعيد بحثه</span> ';
@@ -289,28 +304,28 @@
             extraBadges += '<span class="badge verify">⚠️ تأكيد الرف</span> ';
         }
 
-        // الملاحظات (إن وُجدت)
+        // الملاحظات
         let notesHtml = '';
         if (r.notes && r.notes.length > 0) {
             notesHtml = '<div style="margin-top:8px; padding-top:8px; border-top:1px dashed #ecf0f1;">';
             notesHtml += '<div style="font-size:12px; color:#7f8c8d; margin-bottom:4px;">📝 الملاحظات:</div>';
             for (const n of r.notes) {
-                notesHtml += `<div style="background:#fff8e1; padding:6px 10px; border-radius:6px; margin-bottom:4px; font-size:13px;">${n.note}</div>`;
+                notesHtml += `<div style="background:#fff8e1; padding:6px 10px; border-radius:6px; margin-bottom:4px; font-size:13px;">${escapeHtml(n.note)}</div>`;
             }
             notesHtml += '</div>';
         }
 
-        // ربط الطلب المشابه
+        // الطلب المشابه
         let similarHtml = '';
         if (r.similar_to_id) {
             similarHtml = `<div style="font-size:12px; color:#9b59b6; margin-top:5px;">🔗 مشابه للطلب #${r.similar_to_id}</div>`;
         }
 
-        // تنسيق الوقت
-        let timeHtml = '';
-        if (r.created_at) {
-            timeHtml = `📅 ${formatTime(r.created_at)}`;
-        }
+        // الوقت
+        let timeHtml = r.created_at ? `📅 ${formatTime(r.created_at)}` : '';
+
+        // الأزرار حسب الحالة
+        let actionsHtml = buildActions(r);
 
         return `
             <div class="card ${cardClass}" data-id="${r.id}">
@@ -325,10 +340,132 @@
                     ${notesHtml}
                 </div>
                 <div class="card-footer">${timeHtml}</div>
+                ${actionsHtml}
             </div>
         `;
     }
 
+    function buildActions(r) {
+        // حالة NEW → زر تولي
+        if (r.status === 'NEW') {
+            return `
+                <div class="actions">
+                    <button class="action-btn primary" onclick="claimRequest(${r.id}, this)">
+                        🔄 تولي
+                    </button>
+                </div>`;
+        }
+
+        // حالة CLAIMED مني → 3 أزرار
+        if (r.status === 'CLAIMED' && r.assigned_to == staffId) {
+            return `
+                <div class="actions">
+                    <button class="action-btn success" onclick="markFound(${r.id}, this)">
+                        ✅ تم إيجاده
+                    </button>
+                    <button class="action-btn danger" onclick="markNotFound(${r.id}, this)">
+                        ❌ لم يُعثر عليه
+                    </button>
+                    <button class="action-btn secondary" onclick="unclaimRequest(${r.id}, this)">
+                        ↩️ إلغاء التولي
+                    </button>
+                </div>`;
+        }
+
+        // حالة CLAIMED من آخرين → بدون أزرار
+        if (r.status === 'CLAIMED' && r.assigned_to != staffId) {
+            return '';
+        }
+
+        // حالة NOT_FOUND → زر إعادة فحص
+        if (r.status === 'NOT_FOUND') {
+            return `
+                <div class="actions">
+                    <button class="action-btn recheck" onclick="recheckRequest(${r.id}, this)">
+                        🔄 إعادة فحص
+                    </button>
+                </div>`;
+        }
+
+        // حالة FOUND → بدون أزرار
+        return '';
+    }
+
+    // ===================== الإجراءات =====================
+    async function callApi(endpoint, requestId, btn, confirmMsg) {
+        if (confirmMsg && !confirm(confirmMsg)) return false;
+        if (btn) {
+            btn.disabled = true;
+            btn.dataset.originalText = btn.textContent;
+            btn.textContent = '⏳...';
+        }
+        try {
+            const res = await fetch(`${BASE_URL}/${endpoint}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ staff_id: staffId, request_id: requestId })
+            });
+            const data = await res.json();
+            if (!res.ok || data.error) {
+                throw new Error(data.error || 'فشل');
+            }
+            return true;
+        } catch (e) {
+            console.error(`❌ ${endpoint}:`, e);
+            alert(`❌ ${e.message}`);
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = btn.dataset.originalText || 'إعادة';
+            }
+            return false;
+        }
+    }
+
+    async function claimRequest(id, btn) {
+        if (await callApi('claim_request', id, btn)) {
+            tg.HapticFeedback?.impactOccurred('light');
+            loadCurrentTab();
+            updateBadges();
+        }
+    }
+
+    async function unclaimRequest(id, btn) {
+        if (await callApi('unclaim_request', id, btn)) {
+            tg.HapticFeedback?.impactOccurred('light');
+            loadCurrentTab();
+            updateBadges();
+        }
+    }
+
+    async function markFound(id, btn) {
+        if (await callApi('mark_found', id, btn)) {
+            tg.HapticFeedback?.notificationOccurred('success');
+            loadCurrentTab();
+            updateBadges();
+        }
+    }
+
+    async function markNotFound(id, btn) {
+        const confirmed = await callApi(
+            'mark_not_found', id, btn,
+            '⚠️ تأكيد: هل أنت متأكد أن الشحنة غير موجودة؟\nسيتم إشعار مرسل الطلب.'
+        );
+        if (confirmed) {
+            tg.HapticFeedback?.notificationOccurred('warning');
+            loadCurrentTab();
+            updateBadges();
+        }
+    }
+
+    async function recheckRequest(id, btn) {
+        if (await callApi('recheck_request', id, btn)) {
+            tg.HapticFeedback?.impactOccurred('medium');
+            loadCurrentTab();
+            updateBadges();
+        }
+    }
+
+    // ===================== أدوات =====================
     function formatTime(isoString) {
         try {
             const d = new Date(isoString);
@@ -337,9 +474,17 @@
             const day = String(d.getDate()).padStart(2, '0');
             const month = String(d.getMonth() + 1).padStart(2, '0');
             return `${day}/${month} - ${hh}:${mm}`;
-        } catch (e) {
-            return isoString;
-        }
+        } catch (e) { return isoString; }
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
     }
 
     // ===================== التشغيل =====================
